@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/invertedv/chutils v1.1.18
-	github.com/invertedv/keyval v0.0.11
+	github.com/invertedv/keyval v0.0.12
 	github.com/stretchr/testify v1.8.2
 )
 
