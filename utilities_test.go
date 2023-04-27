@@ -1,8 +1,9 @@
 package utilities
 
 import (
-	"github.com/invertedv/keyval"
 	"testing"
+
+	"github.com/invertedv/keyval"
 
 	"github.com/stretchr/testify/assert"
 )
