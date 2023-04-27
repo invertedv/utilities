@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/invertedv/chutils"
+	"github.com/invertedv/keyval"
 )
 
 // Position returns the index of needle in the haystack. It returns -1 if needle is not found.
@@ -127,4 +128,16 @@ func ToFile(fileName, text string) error {
 	_, err = handle.WriteString(text)
 
 	return err
+}
+
+// BuildQuery replaces the placeholders with values
+// placeholders have the form "?key".
+// BuildQuery prepends a "?" to the keys in replacers.
+func BuildQuery(srcQry string, replacers keyval.KeyVal) (qry string) {
+	qry = srcQry
+	for k, v := range replacers {
+		qry = strings.ReplaceAll(qry, "?"+k, v.AsString)
+	}
+
+	return qry
 }

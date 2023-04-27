@@ -1,6 +1,7 @@
 package utilities
 
 import (
+	"github.com/invertedv/keyval"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,4 +65,15 @@ func TestPosition(t *testing.T) {
 		has := Has(in, haystack...)
 		assert.Equal(t, exp, has)
 	}
+}
+
+func TestBuildQuery(t *testing.T) {
+	qry := "SELECT ?field FROM ?table"
+	repl := make(keyval.KeyVal)
+	repl["field"] = keyval.Populate("xTest")
+	repl["table"] = keyval.Populate("db.table")
+
+	qryOut := BuildQuery(qry, repl)
+	qryExp := "SELECT xTest FROM db.table"
+	assert.Equal(t, qryExp, qryOut)
 }
