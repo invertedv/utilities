@@ -1,10 +1,14 @@
 package utilities
 
 import (
+	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
-	"math/rand"
+	"math"
+	"math/big"
 	"os"
 	"strings"
 
@@ -64,21 +68,91 @@ func MinInt(ints ...int) int {
 	return min
 }
 
-// ***************  Files
+// RandUnifInt generates a slice whose elements are random U[0,upper) int64's
+func RandUnifInt(n, upper int) ([]int64, error) {
+	const bytesPerInt = 8
 
-// Slash adds a trailing slash if inStr doesn't end in a slash
-func Slash(inStr string) string {
-	if inStr[len(inStr)-1] == '/' {
-		return inStr
+	// generate random bytes
+	b1 := make([]byte, bytesPerInt*n)
+	if _, e := rand.Read(b1); e != nil {
+		return nil, e
 	}
 
-	return inStr + "/"
+	outInts := make([]int64, n)
+	rdr := bytes.NewReader(b1)
+
+	for ind := 0; ind < n; ind++ {
+		r, e := rand.Int(rdr, big.NewInt(int64(upper)))
+		if e != nil {
+			return nil, e
+		}
+		outInts[ind] = r.Int64()
+	}
+
+	return outInts, nil
 }
+
+// RandUnifFlt generates a slice whose elements are random U(0, 1) floats
+func RandUnifFlt(n int) ([]float64, error) {
+	xs, e := RandUnifInt(n, math.MaxInt64)
+	if e != nil {
+		return nil, e
+	}
+
+	fltMax := float64(math.MaxInt64)
+	us := make([]float64, n)
+
+	for ind, x := range xs {
+		us[ind] = float64(x) / fltMax
+	}
+
+	return us, nil
+}
+
+// RandNorm generates a slice whose elements are N(0,1)
+func RandNorm(n int) ([]float64, error) {
+	// algorithm generates normals in pairs
+	nUnif := n + n%2
+
+	xUnif, err := RandUnifFlt(nUnif)
+	if err != nil {
+		return nil, err
+	}
+
+	xNorm := make([]float64, n)
+
+	for ind := 0; ind < n; ind += 2 {
+		lnPart := math.Sqrt(-2.0 * math.Log(xUnif[ind]))
+		angle := 2.0 * math.Pi * xUnif[ind+1]
+		xNorm[ind] = lnPart * math.Cos(angle)
+		if ind+1 < n {
+			xNorm[ind+1] = lnPart * math.Sin(angle)
+		}
+	}
+
+	return xNorm, nil
+}
+
+// ***************  Files
 
 // TempFile produces a random temp file name in the system's tmp location.
 // The file has extension "ext". The file name begins with "tmp" has length 3 + length.
 func TempFile(ext string, length int) string {
 	return Slash(os.TempDir()) + "tmp" + randomLetters(length) + "." + ext
+}
+
+// ToFile writes string to file fileName, which is created
+func ToFile(fileName, text string) error {
+	handle, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = handle.Close() }()
+
+	_, err = handle.WriteString(text)
+
+	return err
 }
 
 // FileExists returns an error if "file" does not exist.
@@ -94,17 +168,58 @@ func FileExists(file string) error {
 	return nil
 }
 
-// randomLetters generates a string of length "length" by randomly choosing from a-z
-func randomLetters(length int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
+// CopyFile copies sourceFile to destFile
+func CopyFile(sourceFile, destFile string) error {
+	inFile, e := os.Open(sourceFile)
+	if e != nil {
+		return e
+	}
+	defer func() { _ = inFile.Close() }()
 
-	name := ""
-	for ind := 0; ind < length; ind++ {
-		randN := rand.Intn(len(letters))
-		name += letters[randN : randN+1]
+	outFile, e := os.Create(destFile)
+	if e != nil {
+		return e
+	}
+	defer func() { _ = outFile.Close() }()
+
+	_, e = io.Copy(outFile, inFile)
+
+	return e
+}
+
+// CopyFiles recursively copies files from fromDir to toDir
+func CopyFiles(fromDir, toDir string) error {
+	fromDir = Slash(fromDir)
+	toDir = Slash(toDir)
+
+	dirList, e := os.ReadDir(fromDir)
+	if e != nil {
+		return e
 	}
 
-	return name
+	// skip if directory is empty
+	if len(dirList) == 0 {
+		return nil
+	}
+
+	if e := os.MkdirAll(toDir, os.ModePerm); e != nil {
+		return e
+	}
+
+	for _, file := range dirList {
+		if file.IsDir() {
+			if e := CopyFiles(fromDir+file.Name(), toDir+file.Name()); e != nil {
+				return e
+			}
+			continue
+		}
+
+		if e := CopyFile(fmt.Sprintf("%s%s", fromDir, file.Name()), fmt.Sprintf("%s%s", toDir, file.Name())); e != nil {
+			return e
+		}
+	}
+
+	return nil
 }
 
 // ***************  DB
@@ -144,20 +259,6 @@ func TableExists(table string, conn *chutils.Connect) error {
 	return nil
 }
 
-// ToFile writes string to file fileName, which is created
-func ToFile(fileName, text string) error {
-	handle, err := os.Create(fileName)
-	if err != nil {
-		return err
-	}
-
-	defer func() { _ = handle.Close() }()
-
-	_, err = handle.WriteString(text)
-
-	return err
-}
-
 // BuildQuery replaces the placeholders with values
 // placeholders have the form "?key".
 // BuildQuery prepends a "?" to the keys in replacers.
@@ -176,4 +277,29 @@ func DropTable(table string, conn *chutils.Connect) error {
 	_, err := conn.Exec(qry)
 
 	return err
+}
+
+// ***************  Misc
+
+// randomLetters generates a string of length "length" by randomly choosing from a-z
+func randomLetters(length int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+
+	name := ""
+	for ind := 0; ind < length; ind++ {
+
+		//		randN := rand.Intn(len(letters))
+		//		name += letters[randN : randN+1]
+	}
+
+	return name
+}
+
+// Slash adds a trailing slash if inStr doesn't end in a slash
+func Slash(inStr string) string {
+	if inStr[len(inStr)-1] == '/' {
+		return inStr
+	}
+
+	return inStr + "/"
 }
