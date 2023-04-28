@@ -95,6 +95,7 @@ func TestRandNorm(t *testing.T) {
 	assert.Greater(t, z, -2.57)
 
 }
+
 func TestMaxInt(t *testing.T) {
 	ins := [][]int{
 		{1, 2, 3, 4},
@@ -164,4 +165,9 @@ func TestBuildQuery(t *testing.T) {
 	qryOut := BuildQuery(qry, repl)
 	qryExp := "SELECT xTest FROM db.table"
 	assert.Equal(t, qryExp, qryOut)
+}
+
+func TestRandomLetters(t *testing.T) {
+	ltrs := RandomLetters(5)
+	assert.Equal(t, len(ltrs), 5)
 }

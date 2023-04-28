@@ -138,7 +138,7 @@ func RandNorm(n int) ([]float64, error) {
 // TempFile produces a random temp file name in the system's tmp location.
 // The file has extension "ext". The file name begins with "tmp" has length 3 + length.
 func TempFile(ext string, length int) string {
-	return Slash(os.TempDir()) + "tmp" + randomLetters(length) + "." + ext
+	return Slash(os.TempDir()) + "tmp" + RandomLetters(length) + "." + ext
 }
 
 // ToFile writes string to file fileName, which is created
@@ -228,7 +228,7 @@ func CopyFiles(fromDir, toDir string) error {
 // The table's name has length 3 +length.
 // tmpDB is the database name.
 func TempTable(tmpDB string, length int) string {
-	return tmpDB + ".tmp" + randomLetters(length)
+	return tmpDB + ".tmp" + RandomLetters(length)
 }
 
 // TableOrQuery takes table and returns a query. If it is already a query (has "select"), just returns the original value.
@@ -281,15 +281,18 @@ func DropTable(table string, conn *chutils.Connect) error {
 
 // ***************  Misc
 
-// randomLetters generates a string of length "length" by randomly choosing from a-z
-func randomLetters(length int) string {
+// RandomLetters generates a string of length "length" by randomly choosing from a-z
+func RandomLetters(length int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
+
+	randN, err := RandUnifInt(len(letters), len(letters))
+	if err != nil {
+		panic(err)
+	}
 
 	name := ""
 	for ind := 0; ind < length; ind++ {
-
-		//		randN := rand.Intn(len(letters))
-		//		name += letters[randN : randN+1]
+		name += letters[randN[ind] : randN[ind]+1]
 	}
 
 	return name
