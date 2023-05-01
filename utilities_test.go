@@ -93,7 +93,6 @@ func TestRandNorm(t *testing.T) {
 	z := xMean / (xStd / math.Sqrt(float64(sample)))
 	assert.Less(t, z, 2.57)
 	assert.Greater(t, z, -2.57)
-
 }
 
 func TestMaxInt(t *testing.T) {
@@ -147,11 +146,11 @@ func TestPosition(t *testing.T) {
 		-1}
 
 	for ind, in := range ins {
-		loc := Position(in, haystack...)
+		loc := Position(in, "", haystack...)
 		assert.Equal(t, loc, exp[ind])
 
 		exp := loc >= 0
-		has := Has(in, haystack...)
+		has := Has(in, "", haystack...)
 		assert.Equal(t, exp, has)
 	}
 }
@@ -170,4 +169,66 @@ func TestBuildQuery(t *testing.T) {
 func TestRandomLetters(t *testing.T) {
 	ltrs := RandomLetters(5)
 	assert.Equal(t, len(ltrs), 5)
+}
+
+func TestAny2Date(t *testing.T) {
+	inVals := []any{"20101101", 20200321, "feb 28, 1999", "October 3, 2001"}
+
+	exp := []time.Time{
+		time.Date(2010, 11, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2020, 3, 21, 0, 0, 0, 0, time.UTC),
+		time.Date(1999, 02, 28, 0, 0, 0, 0, time.UTC),
+		time.Date(2001, 10, 3, 0, 0, 0, 0, time.UTC),
+	}
+
+	for ind, inVal := range inVals {
+		dt, e := Any2Date(inVal)
+		assert.Nil(t, e)
+		assert.Equal(t, exp[ind], *dt)
+	}
+
+	inVals = []any{"20010001", 3399, "feb 30, 2000"}
+	for _, inVal := range inVals {
+		_, e := Any2Date(inVal)
+		assert.NotNil(t, e)
+	}
+}
+
+func TestAny2Float32(t *testing.T) {
+	inVals := []any{"3.14", 2.768, 3}
+	exp := []float32{3.14, 2.768, 3}
+
+	for ind, inVal := range inVals {
+		x, e := Any2Float32(inVal)
+		assert.Nil(t, e)
+		assert.Equal(t, exp[ind], *x)
+	}
+
+	inVals = []any{time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC), "hello"}
+	for _, inVal := range inVals {
+		_, e := Any2Float32(inVal)
+		assert.NotNil(t, e)
+	}
+}
+
+func TestAny2Int32(t *testing.T) {
+	inVals := []any{"3", 22, 3}
+	exp := []int32{3, 22, 3}
+
+	for ind, inVal := range inVals {
+		x, e := Any2Int32(inVal)
+		assert.Nil(t, e)
+		assert.Equal(t, exp[ind], *x)
+	}
+
+	inVals = []any{time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC),
+		"hello",
+		int64(math.MaxInt64),
+		float32(math.MaxInt64),
+		float64(math.MaxInt64)}
+
+	for _, inVal := range inVals {
+		_, e := Any2Int32(inVal)
+		assert.NotNil(t, e)
+	}
 }

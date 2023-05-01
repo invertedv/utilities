@@ -23,12 +23,12 @@ import (
 
 // Position returns the index of needle in the haystack. It returns -1 if needle is not found.
 // If haystack has length 1, then it is split into a slice with delimiter ",".
-func Position(needle string, haystack ...string) int {
+func Position(needle, delim string, haystack ...string) int {
 	var haySlice []string
 	haySlice = haystack
 
-	if len(haystack) == 1 {
-		haySlice = strings.Split(haystack[0], ",")
+	if len(haystack) == 1 && delim != "" && strings.Contains(haystack[0], delim) {
+		haySlice = strings.Split(haystack[0], delim)
 	}
 
 	for ind, straw := range haySlice {
@@ -41,8 +41,8 @@ func Position(needle string, haystack ...string) int {
 }
 
 // Has returns true if needle is in haystack
-func Has(needle string, haystack ...string) bool {
-	return Position(needle, haystack...) >= 0
+func Has(needle, delim string, haystack ...string) bool {
+	return Position(needle, delim, haystack...) >= 0
 }
 
 // MaxInt returns the maximum of ints
@@ -342,15 +342,35 @@ func GTAny(xa, xb any) (truth bool, err error) {
 	return false, fmt.Errorf("unsupported comparison")
 }
 
+// LTAny returns x<y for select underlying types of "any"
+func LTAny(x, y any) (bool, error) {
+	switch xt := x.(type) {
+	case float64:
+		return xt < y.(float64), nil
+	case float32:
+		return xt < y.(float32), nil
+	case int64:
+		return xt < y.(int64), nil
+	case int32:
+		return xt < y.(int32), nil
+	case string:
+		return xt < y.(string), nil
+	case time.Time:
+		return y.(time.Time).Sub(xt) > 0, nil
+	default:
+		return false, fmt.Errorf("cannot compare: LTAny")
+	}
+}
+
 // Comparer compares xa and xb. Comparisons available are: ==, !=, >, <, >=, <=
 func Comparer(xa, xb any, comp string) (truth bool, err error) {
 	// a constant date comes in as a string
 	if t1, e := Any2Date(xa); e == nil {
-		xa = t1
+		xa = *t1
 	}
 
 	if t2, e := Any2Date(xb); e == nil {
-		xb = t2
+		xb = *t2
 	}
 
 	test1, e1 := GTAny(xa, xb)
@@ -426,7 +446,7 @@ func Any2Float64(inVal any) (*float64, error) {
 		return nil, fmt.Errorf("cannot convert %v to float64: Any2Float64", inVal)
 	}
 
-	return &outVal, fmt.Errorf("cannot convert %v to float64: Any2Float64", inVal)
+	return &outVal, nil
 }
 
 // Any2Float32 attempts to convert inVal to float32.  Returns nil if this fails.
@@ -593,22 +613,34 @@ func Any2Kind(inVal any, kind reflect.Kind) (any, error) {
 
 	switch kind {
 	case reflect.Float64:
-		return Any2Float64(inVal)
+		if xF64, e := Any2Float64(inVal); e == nil {
+			return *xF64, nil
+		}
 	case reflect.Float32:
-		return Any2Float32(inVal)
+		if xF32, e := Any2Float32(inVal); e == nil {
+			return *xF32, nil
+		}
 	case reflect.Int64:
-		return Any2Int64(inVal)
+		if xI64, e := Any2Int64(inVal); e == nil {
+			return *xI64, nil
+		}
 	case reflect.Int32:
-		return Any2Int32(inVal)
+		if xI32, e := Any2Int32(inVal); e == nil {
+			return *xI32, nil
+		}
 	case reflect.Int:
-		return Any2Int(inVal)
+		if xI, e := Any2Int(inVal); e == nil {
+			return *xI, nil
+		}
 	case reflect.String:
 		return Any2String(inVal), nil
 	case reflect.Struct:
-		return Any2Date(inVal)
-	default:
-		return nil, fmt.Errorf("unsupported type: %v", kind)
+		if xT, e := Any2Date(inVal); e == nil {
+			return *xT, nil
+		}
 	}
+
+	return nil, fmt.Errorf("unsupported type or conversion error: Any2Kind: %v", kind)
 }
 
 // String2Kind converts a string specifying a type to the reflect.Kind
