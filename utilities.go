@@ -10,7 +10,10 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"reflect"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/invertedv/chutils"
 	"github.com/invertedv/keyval"
@@ -305,4 +308,327 @@ func Slash(inStr string) string {
 	}
 
 	return inStr + "/"
+}
+
+// ***************  Type Conversions
+
+// GTAny compares xa > xb
+func GTAny(xa, xb any) (truth bool, err error) {
+	if xb == nil || xa == nil {
+		return true, nil
+	}
+
+	if reflect.TypeOf(xa) != reflect.TypeOf(xb) {
+		return false, fmt.Errorf("compared values must be of same type, got %v and %v", reflect.TypeOf(xa), reflect.TypeOf(xb))
+	}
+
+	switch x := xa.(type) {
+	case string:
+		x = strings.ReplaceAll(x, "'", "")
+		y := strings.ReplaceAll(xb.(string), "'", "")
+		return x > y, nil
+	case int32:
+		return x > xb.(int32), nil
+	case int64:
+		return x > xb.(int64), nil
+	case float32:
+		return x > xb.(float32), nil
+	case float64:
+		return x > xb.(float64), nil
+	case time.Time:
+		return x.Sub(xb.(time.Time)) > 0, nil
+	}
+
+	return false, fmt.Errorf("unsupported comparison")
+}
+
+// Comparer compares xa and xb. Comparisons available are: ==, !=, >, <, >=, <=
+func Comparer(xa, xb any, comp string) (truth bool, err error) {
+	// a constant date comes in as a string
+	if t1, e := Any2Date(xa); e == nil {
+		xa = t1
+	}
+
+	if t2, e := Any2Date(xb); e == nil {
+		xb = t2
+	}
+
+	test1, e1 := GTAny(xa, xb)
+	if e1 != nil {
+		return false, e1
+	}
+
+	test2, e2 := GTAny(xb, xa)
+	if e2 != nil {
+		return false, e2
+	}
+
+	switch comp {
+	case ">":
+		return test1, nil
+	case ">=":
+		return !test2, nil
+	case "==":
+		return !test1 && !test2, nil
+	case "!=":
+		return test1 || test2, nil
+	case "<":
+		return test2, nil
+	case "<=":
+		return !test1, nil
+	}
+
+	return false, fmt.Errorf("unsupported comparison: %s", comp)
+}
+
+// Any2Date attempts to convert inVal to a date (time.Time). Returns nil if this fails.
+func Any2Date(inVal any) (*time.Time, error) {
+	switch x := inVal.(type) {
+	case string:
+		formats := []string{"20060102", "1/2/2006", "01/02/2006", "Jan 2, 2006", "January 2, 2006"}
+		for _, fmtx := range formats {
+			dt, e := time.Parse(fmtx, strings.ReplaceAll(x, "'", ""))
+			if e == nil {
+				return &dt, nil
+			}
+		}
+	case time.Time:
+		return &x, nil
+	case int, int32, int64:
+		return Any2Date(fmt.Sprintf("%d", x))
+	}
+
+	return nil, fmt.Errorf("cannot convert %v to date: Any2Date", inVal)
+}
+
+// Any2Float64 attempts to convert inVal to float64.  Returns nil if this fails.
+func Any2Float64(inVal any) (*float64, error) {
+	var outVal float64
+
+	switch x := inVal.(type) {
+	case int:
+		outVal = float64(x)
+	case int32:
+		outVal = float64(x)
+	case int64:
+		outVal = float64(x)
+	case float32:
+		outVal = float64(x)
+	case float64:
+		outVal = x
+	case string:
+		xx, e := strconv.ParseFloat(x, 64)
+		if e != nil {
+			return nil, e
+		}
+		outVal = xx
+	default:
+		return nil, fmt.Errorf("cannot convert %v to float64: Any2Float64", inVal)
+	}
+
+	return &outVal, fmt.Errorf("cannot convert %v to float64: Any2Float64", inVal)
+}
+
+// Any2Float32 attempts to convert inVal to float32.  Returns nil if this fails.
+func Any2Float32(inVal any) (*float32, error) {
+	var outVal float32
+
+	switch x := inVal.(type) {
+	case int:
+		outVal = float32(x)
+	case int32:
+		outVal = float32(x)
+	case int64:
+		outVal = float32(x)
+	case float32:
+		outVal = x
+	case float64:
+		outVal = float32(x)
+	case string:
+		xx, e := strconv.ParseFloat(x, 32)
+		if e != nil {
+			return nil, fmt.Errorf("cannot convert %v to float32: Any2Float32", inVal)
+		}
+		outVal = float32(xx)
+	default:
+		return nil, fmt.Errorf("cannot convert %v to float32: Any2Float32", inVal)
+	}
+
+	return &outVal, nil
+}
+
+// Any2Int64 attempts to convert inVal to int64.  Returns nil if this fails.
+func Any2Int64(inVal any) (*int64, error) {
+	var outVal int64
+
+	switch x := inVal.(type) {
+	case int:
+		outVal = int64(x)
+	case int32:
+		outVal = int64(x)
+	case int64:
+		outVal = x
+	case float32:
+		if x > math.MaxInt64 || x < math.MinInt64 {
+			return nil, fmt.Errorf("float32 out of range: Any2Int64")
+		}
+
+		outVal = int64(x)
+	case float64:
+		if x > math.MaxInt64 || x < math.MinInt64 {
+			return nil, fmt.Errorf("float64 out of range: Any2Int64")
+		}
+
+		outVal = int64(x)
+	case string:
+		xx, e := strconv.ParseInt(x, 10, 64)
+		if e != nil {
+			return nil, fmt.Errorf("cannot convert %v to int64: Any2Int64", inVal)
+		}
+
+		outVal = xx
+	default:
+		return nil, fmt.Errorf("cannot convert %v to int64: Any2Int64", inVal)
+	}
+
+	return &outVal, nil
+}
+
+// Any2Int32 attempts to convert inVal to int32.  Returns nil if this fails.
+func Any2Int32(inVal any) (*int32, error) {
+	var outVal int32
+	switch x := inVal.(type) {
+	case int:
+		outVal = int32(x)
+	case int32:
+		outVal = x
+	case int64:
+		if x > math.MaxInt32 || x < math.MinInt32 {
+			return nil, fmt.Errorf("int out of range: Any2Int32")
+		}
+
+		outVal = int32(x)
+	case float32:
+		if x > math.MaxInt32 || x < math.MinInt32 {
+			return nil, fmt.Errorf("float32 out of range: Any2Int32")
+		}
+
+		outVal = int32(x)
+	case float64:
+		if x > math.MaxInt32 || x < math.MinInt32 {
+			return nil, fmt.Errorf("float64 out of range: Any2Int32")
+		}
+
+		outVal = int32(x)
+	case string:
+		xx, e := strconv.ParseInt(x, 10, 32)
+		if e != nil {
+			return nil, fmt.Errorf("cannot convert %v to int32: Any2Int32", inVal)
+		}
+
+		outVal = int32(xx)
+	default:
+		return nil, fmt.Errorf("cannot convert %v to int32: Any2Int32", inVal)
+	}
+
+	return &outVal, nil
+}
+
+// Any2Int attempts to convert inVal to int.  Returns nil if this fails.
+func Any2Int(inVal any) (*int, error) {
+	var outVal int
+	switch x := inVal.(type) {
+	case int:
+		outVal = x
+	case int32:
+		outVal = int(x)
+	case int64:
+		if x > math.MaxInt || x < math.MinInt {
+			return nil, fmt.Errorf("int64 out of range: Any2Int")
+		}
+
+		outVal = int(x)
+	case float32:
+		if x > math.MaxInt || x < math.MinInt {
+			return nil, fmt.Errorf("float32 out of range: Any2Int")
+		}
+
+		outVal = int(x)
+	case float64:
+		if x > math.MaxInt || x < math.MinInt {
+			return nil, fmt.Errorf("float64 out of range: Any2Int")
+		}
+
+		outVal = int(x)
+	case string:
+		xx, e := strconv.ParseInt(x, 10, 32)
+		if e != nil {
+			return nil, fmt.Errorf("cannot convert %v to int: Any2Int", inVal)
+		}
+		outVal = int(xx)
+	default:
+		return nil, fmt.Errorf("cannot convert %v to int: Any2Int", inVal)
+	}
+
+	return &outVal, nil
+}
+
+func Any2String(inVal any) string {
+	switch x := inVal.(type) {
+	case string:
+		return x
+	case time.Time:
+		return x.Format("1/2/2006")
+	case float32, float64:
+		return fmt.Sprintf("%0.2f", x)
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+func Any2Kind(inVal any, kind reflect.Kind) (any, error) {
+	if inVal == nil {
+		return nil, fmt.Errorf("input is nil: Any2Kind")
+	}
+
+	switch kind {
+	case reflect.Float64:
+		return Any2Float64(inVal)
+	case reflect.Float32:
+		return Any2Float32(inVal)
+	case reflect.Int64:
+		return Any2Int64(inVal)
+	case reflect.Int32:
+		return Any2Int32(inVal)
+	case reflect.Int:
+		return Any2Int(inVal)
+	case reflect.String:
+		return Any2String(inVal), nil
+	case reflect.Struct:
+		return Any2Date(inVal)
+	default:
+		return nil, fmt.Errorf("unsupported type: %v", kind)
+	}
+}
+
+// String2Kind converts a string specifying a type to the reflect.Kind
+func String2Kind(str string) reflect.Kind {
+	switch str {
+	case "float64":
+		return reflect.Float64
+	case "float32":
+		return reflect.Float32
+	case "string":
+		return reflect.String
+	case "int":
+		return reflect.Int
+	case "int32":
+		return reflect.Int32
+	case "int64":
+		return reflect.Int64
+	case "time.Time":
+		return reflect.Struct
+	default:
+		return reflect.Interface
+	}
 }
