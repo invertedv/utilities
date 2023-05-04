@@ -249,6 +249,28 @@ func TableOrQuery(table string) string {
 	}
 }
 
+// DBExists returns an error if db does not exist
+func DBExists(db string, conn *chutils.Connect) error {
+	qry := fmt.Sprintf("EXISTS DATABASE %s", db)
+
+	res, e := conn.Query(qry)
+	if e != nil {
+		return e
+	}
+
+	var exist uint8
+	res.Next()
+	if e := res.Scan(&exist); e != nil {
+		return e
+	}
+
+	if exist == 0 {
+		return fmt.Errorf("db %s does not exist", db)
+	}
+
+	return nil
+}
+
 // TableExists returns an error if "table" does not exist.
 // conn is the DB connector.
 func TableExists(table string, conn *chutils.Connect) error {
