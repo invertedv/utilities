@@ -257,6 +257,7 @@ func DBExists(db string, conn *chutils.Connect) error {
 	if e != nil {
 		return e
 	}
+	defer func() { _ = res.Close() }()
 
 	var exist uint8
 	res.Next()
