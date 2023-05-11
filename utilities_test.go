@@ -1,7 +1,6 @@
 package utilities
 
 import (
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -13,6 +12,13 @@ import (
 	"gonum.org/v1/gonum/stat"
 )
 
+func TestReplaceSmart(t *testing.T) {
+	inp := " ' x' "
+	exp := "' x'"
+	act := ReplaceSmart(inp, " ", "", "'")
+	assert.Equal(t, exp, act)
+}
+
 func TestRandInt(t *testing.T) {
 	const (
 		upper  = 10
@@ -21,12 +27,9 @@ func TestRandInt(t *testing.T) {
 
 	p := 1.0 / float64(upper)
 	sig := math.Sqrt(p * (1.0 - p) / float64(sample))
-
-	start := time.Now()
-
 	x, e := RandUnifInt(sample, upper)
 	assert.Nil(t, e)
-	fmt.Println("elapsed: ", time.Since(start).Seconds())
+
 	xCnts := make([]int64, upper)
 	for _, xval := range x {
 		xCnts[xval]++

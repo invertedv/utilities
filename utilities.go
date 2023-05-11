@@ -45,6 +45,19 @@ func Has(needle, delim string, haystack ...string) bool {
 	return Position(needle, delim, haystack...) >= 0
 }
 
+// YesNo determines if inStr is yes/no, return true if "yes"
+func YesNo(inStr string) (bool, error) {
+	if inStr != "yes" && inStr != "no" && inStr != "" {
+		return false, fmt.Errorf("expected yes/no, got %s", inStr)
+	}
+
+	if inStr == "no" || inStr == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // MaxInt returns the maximum of ints
 func MaxInt(ints ...int) int {
 	max := ints[0]
@@ -306,6 +319,45 @@ func DropTable(table string, conn *chutils.Connect) error {
 }
 
 // ***************  Misc
+
+// ReplaceSmart replaces old with new except when it occurs within delim
+func ReplaceSmart(source, oldChar, newChar, delim string) string {
+	if len(oldChar) > 1 || len(newChar) > 1 || len(delim) > 1 {
+		panic(fmt.Errorf("old, new or delim has multiple characters in ReplaceSmart"))
+	}
+	inside := false
+	replaced := ""
+	for ind := 0; ind < len(source); ind++ {
+		ch := source[ind : ind+1]
+		switch ch {
+		case delim:
+			inside = !inside
+		case oldChar:
+			if !inside {
+				ch = newChar
+			}
+		}
+		replaced += ch
+	}
+
+	return replaced
+}
+
+// PrettyDur returns a run duration in a minutes/seconds format
+func PrettyDur(startTime time.Time) string {
+	const secsPmin = 60
+
+	secs := time.Since(startTime).Seconds()
+
+	if secs < secsPmin {
+		return fmt.Sprintf("%d seconds", int(math.Round(secs)))
+	}
+
+	mins := secs / 60
+	secs -= mins * 60
+
+	return fmt.Sprintf("%d minutes %2.0f seconds", int(mins), secs)
+}
 
 // RandomLetters generates a string of length "length" by randomly choosing from a-z
 func RandomLetters(length int) string {
@@ -627,6 +679,19 @@ func Any2String(inVal any) string {
 	default:
 		return fmt.Sprintf("%v", x)
 	}
+}
+
+func AnySlice2Float64(inVal []any) ([]float64, error) {
+	outVal := make([]float64, len(inVal))
+	for ind, x := range inVal {
+		xf, e := Any2Float64(x)
+		if e != nil {
+			return nil, e
+		}
+		outVal[ind] = *xf
+	}
+
+	return outVal, nil
 }
 
 func Any2Kind(inVal any, kind reflect.Kind) (any, error) {
