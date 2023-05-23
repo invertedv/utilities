@@ -343,6 +343,22 @@ func ReplaceSmart(source, oldChar, newChar, delim string) string {
 	return replaced
 }
 
+// moves a date to the last day of the month
+func ToLastDay(dt time.Time) (eom time.Time) {
+	yr, mon := dt.Year(), dt.Month()
+	mon++
+	if mon == 13 {
+		mon = 1
+		yr++
+	}
+
+	eom = time.Date(yr, mon, 1, 0, 0, 0, 0, time.UTC)
+	eom = eom.Add(-24 * time.Hour)
+
+	return eom
+
+}
+
 // PrettyDur returns a run duration in a minutes/seconds format
 func PrettyDur(startTime time.Time) string {
 	const secsPmin = 60
