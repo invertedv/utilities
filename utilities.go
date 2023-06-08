@@ -363,16 +363,16 @@ func ToLastDay(dt time.Time) (eom time.Time) {
 func PrettyDur(startTime time.Time) string {
 	const secsPmin = 60
 
-	secs := time.Since(startTime).Seconds()
+	secs := int(time.Since(startTime).Seconds())
 
 	if secs < secsPmin {
-		return fmt.Sprintf("%d seconds", int(math.Round(secs)))
+		return fmt.Sprintf("%d seconds", secs)
 	}
 
 	mins := secs / 60
 	secs -= mins * 60
 
-	return fmt.Sprintf("%d minutes %2.0f seconds", int(mins), secs)
+	return fmt.Sprintf("%d minutes %d seconds", int(mins), secs)
 }
 
 // RandomLetters generates a string of length "length" by randomly choosing from a-z
@@ -496,7 +496,7 @@ func Comparer(xa, xb any, comp string) (truth bool, err error) {
 func Any2Date(inVal any) (*time.Time, error) {
 	switch x := inVal.(type) {
 	case string:
-		formats := []string{"20060102", "1/2/2006", "01/02/2006", "Jan 2, 2006", "January 2, 2006"}
+		formats := []string{"20060102", "1/2/2006", "01/02/2006", "Jan 2, 2006", "January 2, 2006", "Jan 2 2006", "January 2 2006"}
 		for _, fmtx := range formats {
 			dt, e := time.Parse(fmtx, strings.ReplaceAll(x, "'", ""))
 			if e == nil {
