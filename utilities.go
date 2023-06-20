@@ -312,7 +312,7 @@ func BuildQuery(srcQry string, replacers keyval.KeyVal) (qry string) {
 
 // DropTable drops the table from ClickHouse
 func DropTable(table string, conn *chutils.Connect) error {
-	qry := fmt.Sprintf("DROP TABLE %s", table)
+	qry := fmt.Sprintf("DROP TABLE IF EXISTS %s", table)
 	_, err := conn.Exec(qry)
 
 	return err
