@@ -791,14 +791,29 @@ func String2Kind(str string) reflect.Kind {
 //     orca requires FUSE.  FUSE installation instructions are [here](https://github.com/AppImage/AppImageKit/wiki/FUSE)
 //
 // Note that --no-sandbox is added to orca per this [thread](https://github.com/chrismaltby/gb-studio/issues/1102).
-func Fig2File(fig *grob.Fig, outDir, outFile string) error {
+//
+// Inputs:
+//   - fig.  plotly figure
+//   - plotType.  graph type. One of: png, jpeg, webp, svg, pdf, eps, emf
+//   - outDir.  Output directory.
+//   - outFile. Filename of output, with NO extension.
+func Fig2File(fig *grob.Fig, plotType, outDir, outFile string) error {
+	const plotTypes = "png,jpeg,webp,svg,pdf,eps,emf"
+	if strings.Contains(outFile, ".") {
+		return fmt.Errorf("no extension allowed for outFile in Fig2File")
+	}
+
+	if !Has(plotType, ",", plotTypes) {
+		return fmt.Errorf("illegal plotType in Fig2File. Must be one of: %s", plotTypes)
+	}
+
 	figBytes, err := json.Marshal(fig)
 	figStr := "'" + string(figBytes) + "'"
 	if err != nil {
 		panic(err)
 	}
 
-	comm := fmt.Sprintf("orca graph %s --no-sandbox -d %s -o %s", figStr, outDir, outFile)
+	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", figStr, plotType, outDir, outFile, plotType)
 	cmd := exec.Command("bash", "-c", comm)
 
 	return cmd.Run()
