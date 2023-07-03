@@ -3,6 +3,7 @@ package utilities
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,11 +11,13 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"github.com/invertedv/chutils"
 	"github.com/invertedv/keyval"
 )
@@ -767,4 +770,36 @@ func String2Kind(str string) reflect.Kind {
 	default:
 		return reflect.Interface
 	}
+}
+
+// ***************  Plotly
+
+// Fig2File outputs a plotly figure to a graphics file (png, jpg, etc)
+// This package requires that orca be installed.
+// The orca repo is [here](https://github.com/plotly/orca).
+//
+// Steps:
+//
+//  1. Download the latest [release](https://github.com/plotly/orca/releases) of the AppImage.
+//
+//  2. Put it somewhere safe.
+//
+//  3. chmod +x
+//
+//  4. make a symbolic link called "orca" in your path.
+//
+//     orca requires FUSE.  FUSE installation instructions are [here](https://github.com/AppImage/AppImageKit/wiki/FUSE)
+//
+// Note that --no-sandbox is added to orca per this [thread](https://github.com/chrismaltby/gb-studio/issues/1102).
+func Fig2File(fig *grob.Fig, outDir, outFile string) error {
+	figBytes, err := json.Marshal(fig)
+	figStr := "'" + string(figBytes) + "'"
+	if err != nil {
+		panic(err)
+	}
+
+	comm := fmt.Sprintf("orca graph %s --no-sandbox -d %s -o %s", figStr, outDir, outFile)
+	cmd := exec.Command("bash", "-c", comm)
+
+	return cmd.Run()
 }
