@@ -48,6 +48,32 @@ func Has(needle, delim string, haystack ...string) bool {
 	return Position(needle, delim, haystack...) >= 0
 }
 
+// Matched returns a substring that is between the outermost set of startChar/endChar
+func Matched(inStr, startChar, endChar string) (string, error) {
+	start, ignore := -1, 0
+
+	for ind := 0; ind < len(inStr); ind++ {
+		switch inStr[ind : ind+1] {
+		case startChar:
+			if start == -1 {
+				start = ind
+			}
+			ignore++
+		case endChar:
+			ignore--
+			if ignore == 0 {
+				return inStr[start+1 : ind], nil
+			}
+		}
+	}
+
+	if start == -1 {
+		return "", nil
+	}
+
+	return "", fmt.Errorf("unmatched startChar")
+}
+
 // YesNo determines if inStr is yes/no, return true if "yes"
 func YesNo(inStr string) (bool, error) {
 	if inStr != "yes" && inStr != "no" && inStr != "" {
@@ -774,8 +800,8 @@ func String2Kind(str string) reflect.Kind {
 
 // ***************  Plotly
 
-// Fig2File outputs a plotly figure to a graphics file (png, jpg, etc)
-// This package requires that orca be installed.
+// Fig2File outputs a plotly figure to a graphics file (png, jpg, etc.)
+// This func requires that orca be installed.
 // The orca repo is [here](https://github.com/plotly/orca).
 //
 // Steps:
@@ -808,12 +834,103 @@ func Fig2File(fig *grob.Fig, plotType, outDir, outFile string) error {
 	}
 
 	figBytes, err := json.Marshal(fig)
-	figStr := "'" + string(figBytes) + "'"
+	figStr := string(figBytes)
 	if err != nil {
 		panic(err)
 	}
 
-	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", figStr, plotType, outDir, outFile, plotType)
+	tempFileName := TempFile("js", 8)
+
+	var tempFile *os.File
+	if tempFile, err = os.Create(tempFileName); err != nil {
+		return err
+	}
+
+	if _, e := tempFile.WriteString(figStr); e != nil {
+		return e
+	}
+
+	_ = tempFile.Close()
+	defer func() { _ = os.Remove(tempFileName) }()
+
+	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", tempFileName, plotType, outDir, outFile, plotType)
+	cmd := exec.Command("bash", "-c", comm)
+
+	return cmd.Run()
+
+	comm = fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", figStr, plotType, outDir, outFile, plotType)
+	cmd = exec.Command("bash", "-c", comm)
+
+	return cmd.Run()
+}
+
+// HTML2File produces an image file from a plotly html file
+// This func requires that orca be installed.
+// The orca repo is [here](https://github.com/plotly/orca).
+//
+// Steps:
+//
+//  1. Download the latest [release](https://github.com/plotly/orca/releases) of the AppImage.
+//
+//  2. Put it somewhere safe.
+//
+//  3. chmod +x
+//
+//  4. make a symbolic link called "orca" in your path.
+//
+//     orca requires FUSE.  FUSE installation instructions are [here](https://github.com/AppImage/AppImageKit/wiki/FUSE)
+//
+// Note that --no-sandbox is added to orca per this [thread](https://github.com/chrismaltby/gb-studio/issues/1102).
+//
+// Inputs:
+//   - htmlFile.  plotly html file
+//   - plotType.  graph type. One of: png, jpeg, webp, svg, pdf, eps, emf
+//   - outDir.  Output directory.
+//   - outFile. Filename of output, with NO extension.
+func HTML2File(htmlFile, plotType, outDir, outFile string) error {
+	var (
+		handle *os.File
+		err    error
+	)
+
+	if handle, err = os.Open(htmlFile); err != nil {
+		return err
+	}
+	defer func() { _ = handle.Close() }()
+
+	var plot []byte
+	if plot, err = io.ReadAll(handle); err != nil {
+		return err
+	}
+
+	plotStr := string(plot)
+
+	indx := strings.Index(plotStr, "JSON.parse")
+
+	if indx < 0 {
+		return fmt.Errorf("not a plotly html file: %s", htmlFile)
+	}
+
+	var jsonStr string
+	if jsonStr, err = Matched(plotStr[indx+10:], "(", ")"); err != nil {
+		return err
+	}
+
+	tempFileName := TempFile("js", 8)
+
+	var tempFile *os.File
+	if tempFile, err = os.Create(tempFileName); err != nil {
+		return err
+	}
+
+	if _, e := tempFile.WriteString(jsonStr[1 : len(jsonStr)-1]); e != nil {
+		return e
+	}
+
+	_ = tempFile.Close()
+	defer func() { _ = os.Remove(tempFileName) }()
+
+	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", tempFileName, plotType, outDir, outFile, plotType)
 	cmd := exec.Command("bash", "-c", comm)
 
 	return cmd.Run()

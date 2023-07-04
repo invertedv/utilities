@@ -1,6 +1,7 @@
 package utilities
 
 import (
+	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"math"
 	"testing"
 	"time"
@@ -254,4 +255,41 @@ func TestAny2Int32(t *testing.T) {
 		_, e := Any2Int32(inVal)
 		assert.NotNil(t, e)
 	}
+}
+
+func TestMatched(t *testing.T) {
+	inStrs := []string{"a(bb(cc) dd (ee))", "a[b[c[d]]]", "abc"}
+	results := []string{"bb(cc) dd (ee)", "b[c[d]]", ""}
+	seps := []string{"()", "[]", "()"}
+
+	for ind, inStr := range inStrs {
+		subStr, e := Matched(inStr, seps[ind][0:1], seps[ind][1:2])
+		assert.Nil(t, e)
+		assert.Equal(t, results[ind], subStr)
+	}
+
+	inStrs = []string{"a(b()"}
+	seps = []string{"()"}
+
+	for ind, inStr := range inStrs {
+		_, e := Matched(inStr, seps[ind][0:1], seps[ind][1:2])
+		assert.NotNil(t, e)
+	}
+}
+
+func TestHTML2File(t *testing.T) {
+	htmlFile := "/home/will/tmp/marginal.html"
+	e := HTML2File(htmlFile, "png", "/home/will/tmp", "marginal")
+	assert.Nil(t, e)
+}
+
+func TestFig2File(t *testing.T) {
+	x := []string{"A", "B", "C", "D"}
+	y := []float32{5, 6, 7, 8}
+	histPlot := &grob.Bar{X: x, Y: y}
+	fig := &grob.Fig{Data: grob.Traces{histPlot}}
+	lay := &grob.Layout{Width: 800, Height: 600, Title: &grob.LayoutTitle{Text: "Bar Chart"}}
+	fig.Layout = lay
+	e := Fig2File(fig, "png", "/home/will/tmp", "testpng")
+	assert.Nil(t, e)
 }
