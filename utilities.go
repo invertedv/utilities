@@ -3,22 +3,18 @@ package utilities
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/MetalBlueberry/go-plotly/offline"
 	"io"
 	"io/fs"
 	"math"
 	"math/big"
 	"os"
-	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"github.com/invertedv/chutils"
 	"github.com/invertedv/keyval"
 )
@@ -88,6 +84,8 @@ func YesNo(inStr string) (bool, error) {
 	return true, nil
 }
 
+// ***************  Math
+
 // MaxInt returns the maximum of ints
 func MaxInt(ints ...int) int {
 	max := ints[0]
@@ -99,8 +97,6 @@ func MaxInt(ints ...int) int {
 
 	return max
 }
-
-// ***************  Math
 
 // MinInt returns the minimum of ints
 func MinInt(ints ...int) int {
@@ -373,7 +369,7 @@ func ReplaceSmart(source, oldChar, newChar, delim string) string {
 	return replaced
 }
 
-// moves a date to the last day of the month
+// ToLastDay moves a date to the last day of the month
 func ToLastDay(dt time.Time) (eom time.Time) {
 	yr, mon := dt.Year(), dt.Month()
 	mon++
@@ -386,7 +382,6 @@ func ToLastDay(dt time.Time) (eom time.Time) {
 	eom = eom.Add(-24 * time.Hour)
 
 	return eom
-
 }
 
 // PrettyDur returns a run duration in a minutes/seconds format
@@ -402,7 +397,7 @@ func PrettyDur(startTime time.Time) string {
 	mins := secs / 60
 	secs -= mins * 60
 
-	return fmt.Sprintf("%d minutes %d seconds", int(mins), secs)
+	return fmt.Sprintf("%d minutes %d seconds", mins, secs)
 }
 
 // RandomLetters generates a string of length "length" by randomly choosing from a-z
@@ -429,6 +424,29 @@ func Slash(inStr string) string {
 	}
 
 	return inStr + "/"
+}
+
+// Aligner returns a slice of strings suitable for printing the two input slices
+func Aligner[ChLeft, ChRight any | int32 | int64 | float32 | float64 | string | time.Time](left []ChLeft, right []ChRight, pad int) []string {
+	if left == nil || right == nil || len(left) != len(right) {
+		return nil
+	}
+
+	maxLen := 0
+	var leftStr, outStr []string
+	for ind := 0; ind < len(left); ind++ {
+		str := fmt.Sprintf("%v", left[ind])
+		maxLen = MaxInt(maxLen, len(str))
+		leftStr = append(leftStr, str)
+	}
+
+	for ind := 0; ind < len(left); ind++ {
+		padding := strings.Repeat(" ", maxLen-len(leftStr[ind])+pad)
+		str := fmt.Sprintf("%s%s%v", leftStr[ind], padding, right[ind])
+		outStr = append(outStr, str)
+	}
+
+	return outStr
 }
 
 // ***************  Type Conversions
@@ -797,247 +815,4 @@ func String2Kind(str string) reflect.Kind {
 	default:
 		return reflect.Interface
 	}
-}
-
-// ***************  Plotly
-
-var Browser = "firefox"
-
-// Fig2File outputs a plotly figure to a graphics file (png, jpg, etc.)
-// This func requires that orca be installed.
-// The orca repo is [here](https://github.com/plotly/orca).
-//
-// Steps:
-//
-//  1. Download the latest [release](https://github.com/plotly/orca/releases) of the AppImage.
-//
-//  2. Put it somewhere safe.
-//
-//  3. chmod +x
-//
-//  4. make a symbolic link called "orca" in your path.
-//
-//     orca requires FUSE.  FUSE installation instructions are [here](https://github.com/AppImage/AppImageKit/wiki/FUSE)
-//
-// Note that --no-sandbox is added to orca per this [thread](https://github.com/chrismaltby/gb-studio/issues/1102).
-//
-// Inputs:
-//   - fig.  plotly figure
-//   - plotType.  graph type. One of: png, jpeg, webp, svg, pdf, eps, emf
-//   - outDir.  Output directory.
-//   - outFile. Filename of output, with NO extension.
-func Fig2File(fig *grob.Fig, plotType, outDir, outFile string) error {
-	const plotTypes = "png,jpeg,webp,svg,pdf,eps,emf"
-	if strings.Contains(outFile, ".") {
-		return fmt.Errorf("no extension allowed for outFile in Fig2File")
-	}
-
-	if !Has(plotType, ",", plotTypes) {
-		return fmt.Errorf("illegal plotType in Fig2File. Must be one of: %s", plotTypes)
-	}
-
-	figBytes, err := json.Marshal(fig)
-	figStr := string(figBytes)
-	if err != nil {
-		panic(err)
-	}
-
-	tempFileName := TempFile("js", 8)
-
-	var tempFile *os.File
-	if tempFile, err = os.Create(tempFileName); err != nil {
-		return err
-	}
-
-	if _, e := tempFile.WriteString(figStr); e != nil {
-		return e
-	}
-
-	_ = tempFile.Close()
-	defer func() { _ = os.Remove(tempFileName) }()
-
-	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", tempFileName, plotType, outDir, outFile, plotType)
-	cmd := exec.Command("bash", "-c", comm)
-
-	return cmd.Run()
-
-	comm = fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", figStr, plotType, outDir, outFile, plotType)
-	cmd = exec.Command("bash", "-c", comm)
-
-	return cmd.Run()
-}
-
-// HTML2File produces an image file from a plotly html file
-// This func requires that orca be installed.
-// The orca repo is [here](https://github.com/plotly/orca).
-//
-// Steps:
-//
-//  1. Download the latest [release](https://github.com/plotly/orca/releases) of the AppImage.
-//
-//  2. Put it somewhere safe.
-//
-//  3. chmod +x
-//
-//  4. make a symbolic link called "orca" in your path.
-//
-//     orca requires FUSE.  FUSE installation instructions are [here](https://github.com/AppImage/AppImageKit/wiki/FUSE)
-//
-// Note that --no-sandbox is added to orca per this [thread](https://github.com/chrismaltby/gb-studio/issues/1102).
-//
-// Inputs:
-//   - htmlFile.  plotly html file
-//   - plotType.  graph type. One of: png, jpeg, webp, svg, pdf, eps, emf
-//   - outDir.  Output directory.
-//   - outFile. Filename of output, with NO extension.
-func HTML2File(htmlFile, plotType, outDir, outFile string) error {
-	var (
-		handle *os.File
-		err    error
-	)
-
-	if handle, err = os.Open(htmlFile); err != nil {
-		return err
-	}
-	defer func() { _ = handle.Close() }()
-
-	var plot []byte
-	if plot, err = io.ReadAll(handle); err != nil {
-		return err
-	}
-
-	plotStr := string(plot)
-
-	indx := strings.Index(plotStr, "JSON.parse")
-
-	if indx < 0 {
-		return fmt.Errorf("not a plotly html file: %s", htmlFile)
-	}
-
-	var jsonStr string
-	if jsonStr, err = Matched(plotStr[indx+10:], "(", ")"); err != nil {
-		return err
-	}
-
-	tempFileName := TempFile("js", 8)
-
-	var tempFile *os.File
-	if tempFile, err = os.Create(tempFileName); err != nil {
-		return err
-	}
-
-	if _, e := tempFile.WriteString(jsonStr[1 : len(jsonStr)-1]); e != nil {
-		return e
-	}
-
-	_ = tempFile.Close()
-	defer func() { _ = os.Remove(tempFileName) }()
-
-	comm := fmt.Sprintf("orca graph %s --no-sandbox -f %s -d %s  -o %s.%s", tempFileName, plotType, outDir, outFile, plotType)
-	cmd := exec.Command("bash", "-c", comm)
-
-	return cmd.Run()
-}
-
-// PlotDef specifies Plotly Layout features I commonly use.
-type PlotDef struct {
-	Show     bool    // Show - true = show graph in browser
-	Title    string  // Title - plot title
-	XTitle   string  // XTitle - x-axis title
-	YTitle   string  // Ytitle - y-axis title
-	STitle   string  // STitle - sub-title (under the x-axis)
-	Legend   bool    // Legend - true = show legend
-	Height   float64 // Height - height of graph, in pixels
-	Width    float64 // Width - width of graph, in pixels
-	FileName string  // FileName - output file for graph (in html)
-}
-
-// Plotter plots the Plotly Figure fig with Layout lay.  The layout is augmented by
-// features I commonly use.
-//
-//	fig      plotly figure
-//	lay      plotly layout (nil is OK)
-//	pd       PlotDef structure with plot options.
-//
-// lay can be initialized with any additional layout options needed.
-func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
-	// convert newlines to <br>
-	pd.Title = strings.ReplaceAll(pd.Title, "\n", "<br>")
-	pd.STitle = strings.ReplaceAll(pd.STitle, "\n", "<br>")
-	pd.XTitle = strings.ReplaceAll(pd.XTitle, "\n", "<br>")
-	pd.YTitle = strings.ReplaceAll(pd.YTitle, "\n", "<br>")
-
-	if lay == nil {
-		lay = &grob.Layout{}
-	}
-
-	if pd.Title != "" {
-		lay.Title = &grob.LayoutTitle{Text: pd.Title}
-	}
-
-	if pd.YTitle != "" {
-		if lay.Yaxis == nil {
-			lay.Yaxis = &grob.LayoutYaxis{Title: &grob.LayoutYaxisTitle{Text: pd.YTitle}}
-		} else {
-			lay.Yaxis.Title = &grob.LayoutYaxisTitle{Text: pd.YTitle}
-		}
-		lay.Yaxis.Showline = grob.True
-	}
-
-	if pd.XTitle != "" {
-		xTitle := pd.XTitle
-		if pd.STitle != "" {
-			xTitle += fmt.Sprintf("<br>%s", pd.STitle)
-		}
-
-		if lay.Xaxis == nil {
-			lay.Xaxis = &grob.LayoutXaxis{Title: &grob.LayoutXaxisTitle{Text: xTitle}}
-		} else {
-			lay.Xaxis.Title = &grob.LayoutXaxisTitle{Text: pd.YTitle}
-		}
-	}
-
-	if !pd.Legend {
-		lay.Showlegend = grob.False
-	}
-
-	if pd.Width > 0.0 {
-		lay.Width = pd.Width
-	}
-
-	if pd.Height > 0.0 {
-		lay.Height = pd.Height
-	}
-
-	fig.Layout = lay
-
-	if pd.FileName != "" {
-		offline.ToHtml(fig, pd.FileName)
-	}
-	if pd.Show {
-		tmp := false
-		if pd.FileName == "" {
-			tmp = true
-			// create temp file.  We'll return this, in case it's needed
-			pd.FileName = TempFile("plotly", 8)
-		}
-
-		offline.ToHtml(fig, pd.FileName)
-		cmd := exec.Command(Browser, "-url", pd.FileName)
-
-		if e := cmd.Start(); e != nil {
-			return e
-		}
-		time.Sleep(time.Second)
-
-		if tmp {
-			// need to pause while browser loads graph
-
-			if e := os.Remove(pd.FileName); e != nil {
-				return e
-			}
-		}
-	}
-
-	return nil
 }

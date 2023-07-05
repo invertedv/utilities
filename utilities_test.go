@@ -1,10 +1,12 @@
 package utilities
 
 import (
-	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"math"
+	"os"
 	"testing"
 	"time"
+
+	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 
 	"github.com/invertedv/keyval"
 
@@ -278,8 +280,9 @@ func TestMatched(t *testing.T) {
 }
 
 func TestHTML2File(t *testing.T) {
-	htmlFile := "/home/will/tmp/marginal.html"
-	e := HTML2File(htmlFile, "png", "/home/will/tmp", "marginal")
+	htmlFile := os.Getenv("data") + "/marginal.html"
+	outDir := os.TempDir()
+	e := HTML2File(htmlFile, PlotlyPNG, outDir, "marginal")
 	assert.Nil(t, e)
 }
 
@@ -290,6 +293,44 @@ func TestFig2File(t *testing.T) {
 	fig := &grob.Fig{Data: grob.Traces{histPlot}}
 	lay := &grob.Layout{Width: 800, Height: 600, Title: &grob.LayoutTitle{Text: "Bar Chart"}}
 	fig.Layout = lay
-	e := Fig2File(fig, "png", "/home/will/tmp", "testpng")
+	outDir := os.TempDir()
+	e := Fig2File(fig, PlotlyPNG, outDir, "testpng")
 	assert.Nil(t, e)
+}
+
+func TestPlotter(t *testing.T) {
+	x := []string{"A", "B", "C", "D"}
+	y := []float32{5, 6, 7, 8}
+	histPlot := &grob.Bar{X: x, Y: y}
+	fig := &grob.Fig{Data: grob.Traces{histPlot}}
+	pd := &PlotDef{
+		Show:      true,
+		Title:     "Test Title",
+		XTitle:    "Test X",
+		YTitle:    "Test Y",
+		STitle:    "Subtitle",
+		Legend:    false,
+		Height:    1200,
+		Width:     1200,
+		FileName:  "utilityTest",
+		OutDir:    os.TempDir(),
+		FileTypes: []PlotlyImage{PlotlyHTML, PlotlyPNG, PlotlyJPG},
+	}
+
+	e := Plotter(fig, nil, pd)
+	assert.Nil(t, e)
+}
+
+func TestAligner(t *testing.T) {
+	lefts := []int32{1, 2, 3}
+	rights := []string{"a", "b", "c"}
+	exp := []string{"1  a", "2  b", "3  c"}
+	act := Aligner(lefts, rights, 2)
+	assert.Equal(t, exp, act)
+
+	lefts = []int32{1, 10, 100, 1000}
+	rights = []string{"a", "b", "c", "d"}
+	act = Aligner(lefts, rights, 3)
+	exp = []string{"1      a", "10     b", "100    c", "1000   d"}
+	assert.Equal(t, exp, act)
 }
