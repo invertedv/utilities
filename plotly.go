@@ -132,19 +132,21 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 	// output to file(s)
 	if pd.FileName != "" && pd.FileTypes != nil {
 		for _, ft := range pd.FileTypes {
-			if e := Fig2File(fig, ft, pd.OutDir, pd.FileName); e != nil {
+			outDir := fmt.Sprintf("%s%v", Slash(pd.OutDir), ft)
+			// create it if it's not there
+			if e := os.MkdirAll(outDir, os.ModePerm); e != nil {
+				return e
+			}
+
+			if e := Fig2File(fig, ft, outDir, pd.FileName); e != nil {
 				return e
 			}
 		}
 	}
 
 	if pd.Show {
-		tmp := false
-		if pd.FileName == "" {
-			tmp = true
-			// create temp file.  We'll return this, in case it's needed
-			pd.FileName = TempFile("plotly", nameLength)
-		}
+		// create temp file.  We'll return this, in case it's needed
+		pd.FileName = TempFile("plotly", nameLength)
 
 		offline.ToHtml(fig, pd.FileName)
 		cmd := exec.Command(Browser, "-url", pd.FileName)
@@ -152,14 +154,11 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 		if e := cmd.Start(); e != nil {
 			return e
 		}
-		time.Sleep(time.Second)
 
-		if tmp {
-			// need to pause while browser loads graph
+		time.Sleep(time.Second) // need to pause while browser loads graph
 
-			if e := os.Remove(pd.FileName); e != nil {
-				return e
-			}
+		if e := os.Remove(pd.FileName); e != nil {
+			return e
 		}
 	}
 
@@ -273,19 +272,36 @@ func HTML2File(htmlFile string, plotType PlotlyImage, outDir, outFile string) er
 	return cmd.Run()
 }
 
+// HistData represents a histogram constructed from querying ClickHouse
 type HistData struct {
-	Levels []any
-	Counts []int32
+	Levels   []any             // levels of the field
+	Counts   []int32           // counts
+	Prop     []float32         // proportions
+	Total    int64             // total counts
+	Qry      string            // query used to pull the data
+	FieldDef *chutils.FieldDef // field defs of returns
+	Fig      *grob.Fig         // histogram
 }
 
-func NewHistData(rootQry, field string, conn *chutils.Connect) (*HistData, error) {
-	qry := fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt32(COUNT(*)) AS n FROM d GROUP BY %s ORDER BY %s", rootQry, field, field, field)
+// NewHistData pulls the data from ClickHouse and creates a plotly histogram
+func NewHistData(rootQry, field, where string, conn *chutils.Connect) (*HistData, error) {
+	hd := &HistData{Qry: rootQry}
+
+	var qry string
+	switch where == "" {
+	case true:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt32(COUNT(*)) AS n FROM d GROUP BY %s ORDER BY %s", rootQry, field, field, field)
+	case false:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt32(COUNT(*)) AS n FROM d WHERE %s GROUP BY %s ORDER BY %s", rootQry, field, where, field, field)
+	}
+
 	rdr := s.NewReader(qry, conn)
+	defer func() { _ = rdr.Close() }()
+
 	if e := rdr.Init("", chutils.MergeTree); e != nil {
 		return nil, e
 	}
 
-	hd := &HistData{}
 	rows, _, e := rdr.Read(0, false)
 	if e != nil {
 		return nil, e
@@ -293,8 +309,19 @@ func NewHistData(rootQry, field string, conn *chutils.Connect) (*HistData, error
 
 	for ind := 0; ind < len(rows); ind++ {
 		hd.Levels = append(hd.Levels, rows[ind][0])
-		hd.Counts = append(hd.Counts, rows[ind][1].(int32))
+		n := rows[ind][1].(int32)
+		hd.Counts = append(hd.Counts, n)
+		hd.Total += int64(n)
 	}
+
+	nFloat := float32(hd.Total)
+	for ind := 0; ind < len(rows); ind++ {
+		hd.Prop = append(hd.Prop, float32(hd.Counts[ind])/nFloat)
+	}
+
+	_, hd.FieldDef, _ = rdr.TableSpec().Get(field)
+	histPlot := &grob.Bar{X: hd.Levels, Y: hd.Prop, Type: grob.TraceTypeBar}
+	hd.Fig = &grob.Fig{Data: grob.Traces{histPlot}}
 
 	return hd, nil
 }
@@ -303,9 +330,73 @@ func (hd *HistData) String() string {
 	return strings.Join(Aligner(hd.Levels, hd.Counts, 5), "\n")
 }
 
-func (hd *HistData) Histogram() *grob.Fig {
-	histPlot := &grob.Bar{X: hd.Levels, Y: hd.Counts, Type: grob.TraceTypeBar}
-	fig := &grob.Fig{Data: grob.Traces{histPlot}}
+// QuantileData represents a quantile plot constructed from querying ClickHouse
+type QuantileData struct {
+	Q        []float32         // quantiles at u
+	U        []float32         // u values (0-1)
+	Total    int64             // total sample size
+	Qry      string            // query used to pull the data
+	FieldDef *chutils.FieldDef // field defs of fields pulled
+	Fig      *grob.Fig         // quantile plot
+}
 
-	return fig
+// NewQuantileData pulls the data from ClickHouse and creates a plotly quantile plot
+func NewQuantileData(rootQry, field, where string, conn *chutils.Connect) (*QuantileData, error) {
+	var (
+		ptiles []string
+	)
+
+	outQ := &QuantileData{}
+
+	for ind := 0; ind < 100; ind++ {
+		u := float32(ind) / 100
+		outQ.U = append(outQ.U, u)
+		ptiles = append(ptiles, fmt.Sprintf("%v", u))
+	}
+
+	ptile := strings.Join(ptiles, ",")
+
+	var qry, qryTot string
+	switch where == "" {
+	case true:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT toFloat32(arrayJoin(quantiles(%s)(%s))) AS q FROM d", rootQry, ptile, field)
+		qryTot = fmt.Sprintf("WITH d AS (%s) SELECT toInt64(COUNT(*)) AS n FROM d", rootQry)
+	case false:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT toFloat32(arrayJoin(quantiles(%s)(%s))) AS q FROM d WHERE %s", rootQry, ptile, field, where)
+		qryTot = fmt.Sprintf("WITH d AS (%s) SELECT toInt64(COUNT(*)) AS n FROM d WHERE %s", rootQry, where)
+	}
+
+	outQ.Qry = qry
+
+	rdr := s.NewReader(qryTot, conn)
+	if e := rdr.Init("", chutils.MergeTree); e != nil {
+		return nil, e
+	}
+
+	rows, _, e := rdr.Read(1, false)
+	if e != nil {
+		return nil, e
+	}
+	outQ.Total = rows[0][0].(int64)
+
+	rdr = s.NewReader(qry, conn)
+	defer func() { _ = rdr.Close() }()
+
+	if e := rdr.Init("", chutils.MergeTree); e != nil {
+		return nil, e
+	}
+	_, outQ.FieldDef, _ = rdr.TableSpec().Get(field)
+
+	rows, _, e = rdr.Read(0, false)
+	if e != nil {
+		return nil, e
+	}
+
+	for ind := 0; ind < len(rows); ind++ {
+		outQ.Q = append(outQ.Q, rows[ind][0].(float32))
+	}
+
+	outQ.Fig = &grob.Fig{Data: grob.Traces{&grob.Scatter{X: outQ.U, Y: outQ.Q, Mode: grob.ScatterModeLines}}}
+
+	return outQ, nil
 }

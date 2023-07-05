@@ -816,3 +816,17 @@ func String2Kind(str string) reflect.Kind {
 		return reflect.Interface
 	}
 }
+
+// ToClickHouse returns a string suitable for a ClickHouse constant value
+func ToClickHouse(inVal any) string {
+	switch x := inVal.(type) {
+	case int, int32, int64, float32, float64:
+		return fmt.Sprintf("%v", inVal)
+	case string:
+		return fmt.Sprintf("'%s'", inVal)
+	case time.Time:
+		return fmt.Sprintf("'%s'", x.Format("20060102"))
+	}
+
+	return ""
+}
