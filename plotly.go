@@ -275,7 +275,7 @@ func HTML2File(htmlFile string, plotType PlotlyImage, outDir, outFile string) er
 // HistData represents a histogram constructed from querying ClickHouse
 type HistData struct {
 	Levels   []any             // levels of the field
-	Counts   []int32           // counts
+	Counts   []int64           // counts
 	Prop     []float32         // proportions
 	Total    int64             // total counts
 	Qry      string            // query used to pull the data
@@ -290,9 +290,9 @@ func NewHistData(rootQry, field, where string, conn *chutils.Connect) (*HistData
 	var qry string
 	switch where == "" {
 	case true:
-		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt32(COUNT(*)) AS n FROM d GROUP BY %s ORDER BY %s", rootQry, field, field, field)
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt64(COUNT(*)) AS n FROM d GROUP BY %s ORDER BY %s", rootQry, field, field, field)
 	case false:
-		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt32(COUNT(*)) AS n FROM d WHERE %s GROUP BY %s ORDER BY %s", rootQry, field, where, field, field)
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s, toInt64(COUNT(*)) AS n FROM d WHERE %s GROUP BY %s ORDER BY %s", rootQry, field, where, field, field)
 	}
 
 	rdr := s.NewReader(qry, conn)
@@ -309,7 +309,7 @@ func NewHistData(rootQry, field, where string, conn *chutils.Connect) (*HistData
 
 	for ind := 0; ind < len(rows); ind++ {
 		hd.Levels = append(hd.Levels, rows[ind][0])
-		n := rows[ind][1].(int32)
+		n := rows[ind][1].(int64)
 		hd.Counts = append(hd.Counts, n)
 		hd.Total += int64(n)
 	}
