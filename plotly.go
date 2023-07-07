@@ -22,7 +22,7 @@ const nameLength = 8
 type PlotlyImage int
 
 const (
-	PlotlyJPG PlotlyImage = 0 + iota
+	PlotlyJPEG PlotlyImage = 0 + iota
 	PlotlyPNG
 	PlotlyHTML
 	PlotlyPDF
@@ -34,7 +34,7 @@ const (
 
 func (pi PlotlyImage) String() string {
 	switch pi {
-	case PlotlyJPG:
+	case PlotlyJPEG:
 		return "jpeg"
 	case PlotlyPNG:
 		return "png"
@@ -57,17 +57,17 @@ func (pi PlotlyImage) String() string {
 
 // PlotDef specifies Plotly Layout features I commonly use.
 type PlotDef struct {
-	Show      bool          // Show - true = show graph in browser
-	Title     string        // Title - plot title
-	XTitle    string        // XTitle - x-axis title
-	YTitle    string        // Ytitle - y-axis title
-	STitle    string        // STitle - sub-title (under the x-axis)
-	Legend    bool          // Legend - true = show legend
-	Height    float64       // Height - height of graph, in pixels
-	Width     float64       // Width - width of graph, in pixels
-	FileName  string        // FileName - output file for (no suffix, no path)
-	OutDir    string        // Outdir - output directory
-	FileTypes []PlotlyImage // image type(s) to create (e.g. png, jpg...)
+	Show       bool          // Show - true = show graph in browser
+	Title      string        // Title - plot title
+	XTitle     string        // XTitle - x-axis title
+	YTitle     string        // Ytitle - y-axis title
+	STitle     string        // STitle - sub-title (under the x-axis)
+	Legend     bool          // Legend - true = show legend
+	Height     float64       // Height - height of graph, in pixels
+	Width      float64       // Width - width of graph, in pixels
+	FileName   string        // FileName - output file for (no suffix, no path)
+	OutDir     string        // Outdir - output directory
+	ImageTypes []PlotlyImage // image type(s) to create (e.g. png, jpg...)
 }
 
 // Plotter plots the Plotly Figure fig with Layout lay.  The layout is augmented by
@@ -130,8 +130,8 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 	fig.Layout = lay
 
 	// output to file(s)
-	if pd.FileName != "" && pd.FileTypes != nil {
-		for _, ft := range pd.FileTypes {
+	if pd.FileName != "" && pd.ImageTypes != nil {
+		for _, ft := range pd.ImageTypes {
 			outDir := fmt.Sprintf("%s%v", Slash(pd.OutDir), ft)
 			// create it if it's not there
 			if e := os.MkdirAll(outDir, os.ModePerm); e != nil {

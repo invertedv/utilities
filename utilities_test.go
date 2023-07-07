@@ -304,17 +304,17 @@ func TestPlotter(t *testing.T) {
 	histPlot := &grob.Bar{X: x, Y: y}
 	fig := &grob.Fig{Data: grob.Traces{histPlot}}
 	pd := &PlotDef{
-		Show:      true,
-		Title:     "Test Title",
-		XTitle:    "Test X",
-		YTitle:    "Test Y",
-		STitle:    "Subtitle",
-		Legend:    false,
-		Height:    1200,
-		Width:     1200,
-		FileName:  "utilityTest",
-		OutDir:    os.TempDir(),
-		FileTypes: []PlotlyImage{PlotlyHTML, PlotlyPNG, PlotlyJPG},
+		Show:       true,
+		Title:      "Test Title",
+		XTitle:     "Test X",
+		YTitle:     "Test Y",
+		STitle:     "Subtitle",
+		Legend:     false,
+		Height:     1200,
+		Width:      1200,
+		FileName:   "utilityTest",
+		OutDir:     os.TempDir(),
+		ImageTypes: []PlotlyImage{PlotlyHTML, PlotlyPNG, PlotlyJPEG},
 	}
 
 	e := Plotter(fig, nil, pd)
