@@ -111,7 +111,7 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 		if lay.Xaxis == nil {
 			lay.Xaxis = &grob.LayoutXaxis{Title: &grob.LayoutXaxisTitle{Text: xTitle}}
 		} else {
-			lay.Xaxis.Title = &grob.LayoutXaxisTitle{Text: pd.YTitle}
+			lay.Xaxis.Title = &grob.LayoutXaxisTitle{Text: xTitle}
 		}
 	}
 
@@ -146,7 +146,7 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 
 	if pd.Show {
 		// create temp file.  We'll return this, in case it's needed
-		pd.FileName = TempFile("plotly", nameLength)
+		pd.FileName = TempFile("html", nameLength)
 
 		offline.ToHtml(fig, pd.FileName)
 		cmd := exec.Command(Browser, "-url", pd.FileName)
