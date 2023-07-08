@@ -18,6 +18,10 @@ import (
 // nameLength is the length of random characters for name of temp files
 const nameLength = 8
 
+// Browser is the browser in which to show plots.  This starts as the system default, but can be changed.
+// For instance, Browser="vivaldi" will place the plot in Vivaldi.
+var Browser = "xdg-open"
+
 // PlotlyImage is the type of image file to create
 type PlotlyImage int
 
@@ -149,7 +153,13 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 		pd.FileName = TempFile("html", nameLength)
 
 		offline.ToHtml(fig, pd.FileName)
-		cmd := exec.Command(Browser, "-url", pd.FileName)
+
+		var cmd *exec.Cmd
+		if Browser != "xdg-open" {
+			cmd = exec.Command(Browser, "-url", pd.FileName)
+		} else {
+			cmd = exec.Command(Browser, pd.FileName)
+		}
 
 		if e := cmd.Start(); e != nil {
 			return e
@@ -164,9 +174,6 @@ func Plotter(fig *grob.Fig, lay *grob.Layout, pd *PlotDef) error {
 
 	return nil
 }
-
-// Browser is the browser in which to show plots.  This is not set to the system default so the user has control...
-var Browser = "firefox"
 
 // Fig2File outputs a plotly figure to a graphics file (png, jpg, etc.)
 // This func requires that orca be installed.
@@ -311,7 +318,7 @@ func NewHistData(rootQry, field, where string, conn *chutils.Connect) (*HistData
 		hd.Levels = append(hd.Levels, rows[ind][0])
 		n := rows[ind][1].(int64)
 		hd.Counts = append(hd.Counts, n)
-		hd.Total += int64(n)
+		hd.Total += n
 	}
 
 	nFloat := float32(hd.Total)
@@ -382,8 +389,8 @@ func NewQuantileData(rootQry, field, where string, conn *chutils.Connect) (*Quan
 	rdr = s.NewReader(qry, conn)
 	defer func() { _ = rdr.Close() }()
 
-	if e := rdr.Init("", chutils.MergeTree); e != nil {
-		return nil, e
+	if ex := rdr.Init("", chutils.MergeTree); ex != nil {
+		return nil, ex
 	}
 	_, outQ.FieldDef, _ = rdr.TableSpec().Get(field)
 

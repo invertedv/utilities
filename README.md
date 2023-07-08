@@ -7,6 +7,8 @@ Enough! I got tired of that, so I created a package for it.
 
 You might find them useful, too.
 
+### plotly
+
 Included are functions that work with the excellent Go [Plotly](github.com/MetalBlueberry/go-plotly) project.
 Some of these are convenience functions -- structs to hold common plot parameters such as title.
 Others output plots in standard formats such as png and jpeg. These rely on the
