@@ -407,3 +407,50 @@ func NewQuantileData(rootQry, field, where string, conn *chutils.Connect) (*Quan
 
 	return outQ, nil
 }
+
+type XYData struct {
+	X         []float32         // quantiles at u
+	Y         []float32         // u values (0-1)
+	Qry       string            // query used to pull the data
+	XfieldDef *chutils.FieldDef // field def of X field
+	YfieldDef *chutils.FieldDef // field def of Y field
+	Fig       *grob.Fig         // xy plot
+}
+
+func NewXYData(rootQry, xField, yField, where string, conn *chutils.Connect) (*XYData, error) {
+	outXY := &XYData{}
+
+	var qry string
+	switch where == "" {
+	case true:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s AS x, %s AS y FROM d ORDER BY x", rootQry, xField, yField)
+	case false:
+		qry = fmt.Sprintf("WITH d AS (%s) SELECT %s AS x, %s AS y FROM d WHERE %s ORDER BY x", rootQry, xField, yField, where)
+	}
+
+	outXY.Qry = qry
+
+	rdr := s.NewReader(qry, conn)
+	defer func() { _ = rdr.Close() }()
+
+	if ex := rdr.Init("", chutils.MergeTree); ex != nil {
+		return nil, ex
+	}
+	_, outXY.XfieldDef, _ = rdr.TableSpec().Get(xField)
+	_, outXY.YfieldDef, _ = rdr.TableSpec().Get(yField)
+
+	rows, _, e := rdr.Read(0, false)
+	if e != nil {
+		return nil, e
+	}
+
+	for ind := 0; ind < len(rows); ind++ {
+		outXY.X = append(outXY.X, rows[ind][0].(float32))
+		outXY.Y = append(outXY.Y, rows[ind][1].(float32))
+	}
+
+	outXY.Fig = &grob.Fig{Data: grob.Traces{&grob.Scatter{X: outXY.X, Y: outXY.Y, Mode: grob.ScatterModeMarkers}}}
+
+	return outXY, nil
+
+}
