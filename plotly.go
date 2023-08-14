@@ -409,16 +409,28 @@ func NewQuantileData(rootQry, field, where string, conn *chutils.Connect) (*Quan
 }
 
 type XYData struct {
-	X         []any             // quantiles at u
-	Y         []any             // u values (0-1)
-	Qry       string            // query used to pull the data
-	XfieldDef *chutils.FieldDef // field def of X field
-	YfieldDef *chutils.FieldDef // field def of Y field
-	Fig       *grob.Fig         // xy plot
+	X         []any               // quantiles at u
+	Y         [][]any             // u values (0-1)
+	Qry       string              // query used to pull the data
+	XfieldDef *chutils.FieldDef   // field def of X field
+	YfieldDef []*chutils.FieldDef // field def of Y field
+	Fig       *grob.Fig           // xy plot
 }
 
-func NewXYData(rootQry, xField, yField, where string, conn *chutils.Connect) (*XYData, error) {
+func NewXYData(rootQry, where, fields, colors, lineTypes string, conn *chutils.Connect) (*XYData, error) {
+	var err error
 	outXY := &XYData{}
+	outXY.Fig = &grob.Fig{}
+
+	fieldsSlc := strings.Split(fields, ",")
+	colorsSlc := strings.Split(colors, ",")
+	lineTypeSlc := strings.Split(lineTypes, ",")
+
+	if len(fieldsSlc) > 1 {
+		if len(fieldsSlc) != len(colorsSlc)+1 || len(fieldsSlc) != len(lineTypeSlc)+1 {
+			return nil, fmt.Errorf("lineTypes or colors not correct length")
+		}
+	}
 
 	var qry string
 	switch where == "" {
@@ -437,21 +449,57 @@ func NewXYData(rootQry, xField, yField, where string, conn *chutils.Connect) (*X
 		return nil, ex
 	}
 
-	var colX, colY int
-	colX, outXY.XfieldDef, _ = rdr.TableSpec().Get(xField)
-	colY, outXY.YfieldDef, _ = rdr.TableSpec().Get(yField)
+	colX, startCol := 0, 0
+	if len(fieldsSlc) > 1 {
+		colX, outXY.XfieldDef, _ = rdr.TableSpec().Get(fieldsSlc[0])
+		startCol = 1
+	}
 
 	rows, _, e := rdr.Read(0, false)
 	if e != nil {
 		return nil, e
 	}
 
-	for ind := 0; ind < len(rows); ind++ {
-		outXY.X = append(outXY.X, rows[ind][colX])
-		outXY.Y = append(outXY.Y, rows[ind][colY])
-	}
+	for col := 0; col < len(fieldsSlc)-startCol; col++ {
+		var thisY []any
+		yField := strings.Trim(fieldsSlc[col+startCol], " ")
+		var (
+			colY    int
+			fldDefY *chutils.FieldDef
+		)
 
-	outXY.Fig = &grob.Fig{Data: grob.Traces{&grob.Scatter{X: outXY.X, Y: outXY.Y, Mode: grob.ScatterModeMarkers}}}
+		if colY, fldDefY, err = rdr.TableSpec().Get(yField); err != nil {
+			return nil, err
+		}
+
+		outXY.YfieldDef = append(outXY.YfieldDef, fldDefY)
+
+		for ind := 0; ind < len(rows); ind++ {
+			if col == 0 {
+				switch colX {
+				case -1:
+					outXY.X = append(outXY.X, float32(ind))
+				default:
+					outXY.X = append(outXY.X, rows[ind][colX])
+				}
+			}
+			thisY = append(thisY, rows[ind][colY])
+		}
+
+		outXY.Y = append(outXY.Y, thisY)
+
+		var tr *grob.Scatter
+		switch lineTypeSlc[col] {
+		case "m":
+			tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeMarkers, Marker: &grob.ScatterMarker{Color: colorsSlc[col]}}
+		case "l":
+			tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+		default:
+			return nil, fmt.Errorf("unknown line type: %s", lineTypeSlc[col])
+		}
+
+		outXY.Fig.AddTraces(tr)
+	}
 
 	return outXY, nil
 
