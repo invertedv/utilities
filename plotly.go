@@ -417,7 +417,7 @@ type XYData struct {
 	Fig       *grob.Fig           // xy plot
 }
 
-func NewXYData(rootQry, where, fields, colors, lineTypes string, conn *chutils.Connect) (*XYData, error) {
+func NewXYData(rootQry, where, fields, colors, lineTypes string, box bool, conn *chutils.Connect) (*XYData, error) {
 	var err error
 	outXY := &XYData{}
 	outXY.Fig = &grob.Fig{}
@@ -488,19 +488,23 @@ func NewXYData(rootQry, where, fields, colors, lineTypes string, conn *chutils.C
 
 		outXY.Y = append(outXY.Y, thisY)
 
-		var tr *grob.Scatter
-		switch lineTypeSlc[col] {
-		case "m":
-			tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeMarkers, Marker: &grob.ScatterMarker{Color: colorsSlc[col]}}
-		case "l":
-			tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
-		default:
-			return nil, fmt.Errorf("unknown line type: %s", lineTypeSlc[col])
+		switch box {
+		case false:
+			var tr *grob.Scatter
+			switch lineTypeSlc[col] {
+			case "m":
+				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeMarkers, Marker: &grob.ScatterMarker{Color: colorsSlc[col]}}
+			case "l":
+				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+			default:
+				return nil, fmt.Errorf("unknown line type: %s", lineTypeSlc[col])
+			}
+			outXY.Fig.AddTraces(tr)
+		case true:
+			tr := &grob.Box{Name: fldDefY.Name, X: outXY.X, Y: thisY, Type: grob.TraceTypeBox}
+			outXY.Fig.AddTraces(tr)
 		}
-
-		outXY.Fig.AddTraces(tr)
 	}
 
 	return outXY, nil
-
 }
