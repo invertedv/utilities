@@ -417,7 +417,7 @@ type XYData struct {
 	Fig       *grob.Fig           // xy plot
 }
 
-func NewXYData(rootQry, where, fields, colors, lineTypes string, box bool, conn *chutils.Connect) (*XYData, error) {
+func NewXYData(rootQry, where, fields, colors, lineTypes string, conn *chutils.Connect) (*XYData, error) {
 	var err error
 	outXY := &XYData{}
 	outXY.Fig = &grob.Fig{}
@@ -474,37 +474,132 @@ func NewXYData(rootQry, where, fields, colors, lineTypes string, box bool, conn 
 
 		outXY.YfieldDef = append(outXY.YfieldDef, fldDefY)
 
-		for ind := 0; ind < len(rows); ind++ {
-			if col == 0 {
-				switch colX {
-				case -1:
-					outXY.X = append(outXY.X, float32(ind))
-				default:
-					outXY.X = append(outXY.X, rows[ind][colX])
-				}
-			}
-			thisY = append(thisY, rows[ind][colY])
+		thisY = toSlice(rows, colY)
+		if col == 0 {
+			outXY.X = toSlice(rows, colX)
 		}
 
 		outXY.Y = append(outXY.Y, thisY)
-
-		switch box {
+		//TODO: color not getting to boxplot
+		switch lineTypeSlc[col] == "box" {
 		case false:
 			var tr *grob.Scatter
 			switch lineTypeSlc[col] {
 			case "m":
-				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeMarkers, Marker: &grob.ScatterMarker{Color: colorsSlc[col]}}
+				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY,
+					Mode: grob.ScatterModeMarkers, Marker: &grob.ScatterMarker{Color: colorsSlc[col]}}
 			case "l":
-				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY, Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+				tr = &grob.Scatter{Name: fldDefY.Name, X: outXY.X, Y: thisY,
+					Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+			case "avg":
+				x, y, _, _, _ := means(rootQry, where, outXY.XfieldDef.Name, fldDefY.Name, false, conn)
+				tr = &grob.Scatter{Name: "mean " + fldDefY.Name, X: x, Y: y,
+					Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+			case "median":
+				x, _, y, _, _ := means(rootQry, where, outXY.XfieldDef.Name, fldDefY.Name, true, conn)
+				tr = &grob.Scatter{Name: "median " + fldDefY.Name, X: x, Y: y,
+					Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+			case "se":
+				x, y, _, low, high := means(rootQry, where, outXY.XfieldDef.Name, fldDefY.Name, false, conn)
+				tr = &grob.Scatter{Name: "mean " + fldDefY.Name, X: x, Y: y,
+					Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+				whisker(x, low, high, colorsSlc[col], outXY.Fig)
+			case "quartile":
+				x, _, y, low, high := means(rootQry, where, outXY.XfieldDef.Name, fldDefY.Name, true, conn)
+				tr = &grob.Scatter{Name: "median " + fldDefY.Name, X: x, Y: y,
+					Mode: grob.ScatterModeLines, Line: &grob.ScatterLine{Color: colorsSlc[col]}}
+				whisker(x, low, high, colorsSlc[col], outXY.Fig)
 			default:
 				return nil, fmt.Errorf("unknown line type: %s", lineTypeSlc[col])
 			}
 			outXY.Fig.AddTraces(tr)
 		case true:
-			tr := &grob.Box{Name: fldDefY.Name, X: outXY.X, Y: thisY, Type: grob.TraceTypeBox}
+			tr := &grob.Box{Name: fldDefY.Name, X: outXY.X, Y: thisY, Type: grob.TraceTypeBox, Boxpoints: false,
+				Marker: &grob.BoxMarker{Color: colorsSlc[col]}}
 			outXY.Fig.AddTraces(tr)
 		}
 	}
 
 	return outXY, nil
+}
+
+// toSlice pulls a column out of x
+func toSlice(x []chutils.Row, col int) []any {
+	var out []any
+	for ind := 0; ind < len(x); ind++ {
+		out = append(out, x[ind][col])
+	}
+
+	return out
+}
+
+// means returns the means, +/- 2 std dev,median & quartiles when the query groups by the xField.
+func means(rootQry, where, xField, yField string, quartiles bool, conn *chutils.Connect) (avgX, avgY, medianY, low, high []any) {
+	// skeleton query
+	const blnkQry = `
+WITH d AS (%s) 
+  SELECT %s, 
+  avg(%s) AS avg%s, 
+  avg%s-2*stddevSamp(%s) AS lowSe,
+  avg%s+2*stddevSamp(%s) AS upSe,
+  quantile(.25)(%s) AS lq,
+  quantile(.5)(%s) AS median,
+  quantile(.75)(%s) AS uq
+FROM d 
+%s 
+GROUP BY %s 
+ORDER BY %s
+`
+
+	if where != "" {
+		where = fmt.Sprintf("WHERE %s ", where)
+	}
+
+	// put flesh on the skeleton
+	qry := fmt.Sprintf(blnkQry, rootQry, xField, yField, yField, yField,
+		yField, yField, yField, yField, yField, yField, where, xField, xField)
+
+	rdr := s.NewReader(qry, conn)
+	defer func() { _ = rdr.Close() }()
+
+	if ex := rdr.Init("", chutils.MergeTree); ex != nil {
+		return nil, nil, nil, nil, nil
+	}
+
+	rows, _, e := rdr.Read(0, false)
+	if e != nil {
+		return nil, nil, nil, nil, nil
+	}
+
+	avgX = toSlice(rows, 0)
+	avgY = toSlice(rows, 1)
+	medianY = toSlice(rows, 5)
+	if !quartiles {
+		low = toSlice(rows, 2)
+		high = toSlice(rows, 3)
+	} else {
+		low = toSlice(rows, 4)
+		high = toSlice(rows, 6)
+	}
+
+	return avgX, avgY, medianY, low, high
+}
+
+// whisker adds whiskers (e.g. CIs) to Fig as represented by yLow & yHigh
+func whisker(x, yLow, yHigh []any, color string, fig *grob.Fig) {
+	var width float64
+	switch x[0].(type) {
+	case float32, float64:
+		width = 1
+	default:
+		width = .25
+	}
+
+	for ind, xVal := range x {
+		xs := []any{xVal, xVal}
+		ys := []any{yLow[ind], yHigh[ind]}
+
+		tr1 := &grob.Bar{X: xs, Y: ys, Marker: &grob.BarMarker{Color: color}, Showlegend: grob.False, Width: width, Type: grob.TraceTypeBar} //.25
+		fig.AddTraces(tr1)
+	}
 }
