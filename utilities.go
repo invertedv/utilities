@@ -5,12 +5,14 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"io"
 	"io/fs"
 	"math"
 	"math/big"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +45,21 @@ func Position(needle, delim string, haystack ...string) int {
 // Has returns true if needle is in haystack
 func Has(needle, delim string, haystack ...string) bool {
 	return Position(needle, delim, haystack...) >= 0
+}
+
+// DeDupeSlice removes duplicate entries of inSlc, sorting if sortReturn
+func DeDupeSlice(inSlc []string, sortReturn bool) (outSlc []string) {
+	for _, val := range inSlc {
+		if !Has(val, ",", outSlc...) {
+			outSlc = append(outSlc, val)
+		}
+	}
+
+	if sortReturn {
+		sort.Strings(outSlc)
+	}
+
+	return outSlc
 }
 
 // Matched returns a substring that is between the outermost set of startChar/endChar
@@ -814,6 +831,49 @@ func String2Kind(str string) reflect.Kind {
 		return reflect.Struct
 	default:
 		return reflect.Interface
+	}
+}
+
+// PrettyString returns a string version of x suitable for printing
+func PrettyString(x any) string {
+	// for determining # of places after the decimal
+	const (
+		t1 = 0.1
+		t2 = 1.0
+		t3 = 10.0
+	)
+
+	if x == nil {
+		return ""
+	}
+
+	switch val := x.(type) {
+	case int:
+		return humanize.Comma(int64(val))
+	case int32:
+		return humanize.Comma(int64(val))
+	case int64:
+		return humanize.Comma(val)
+	case float64:
+		r := math.Abs(val)
+		switch {
+		case r < t1:
+			return fmt.Sprintf("%0.4f", val)
+		case r < t2:
+			return fmt.Sprintf("%0.3f", val)
+		case r < t3:
+			return fmt.Sprintf("%0.2f", val)
+		default:
+			return fmt.Sprintf("%0.1f", val)
+		}
+	case float32:
+		return PrettyString(float64(val))
+	case string:
+		return val
+	case time.Time:
+		return val.Format("2006-01-02")
+	default:
+		return ""
 	}
 }
 
