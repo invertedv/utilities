@@ -474,25 +474,55 @@ func GTAny(xa, xb any) (truth bool, err error) {
 		return true, nil
 	}
 
-	if reflect.TypeOf(xa) != reflect.TypeOf(xb) {
-		return false, fmt.Errorf("compared values must be of same type, got %v and %v", reflect.TypeOf(xa), reflect.TypeOf(xb))
-	}
+	//	if reflect.TypeOf(xa) != reflect.TypeOf(xb) {
+	//		return false, fmt.Errorf("compared values must be of same type, got %v and %v", reflect.TypeOf(xa), reflect.TypeOf(xb))
+	//	}
 
 	switch x := xa.(type) {
 	case string:
 		x = strings.ReplaceAll(x, "'", "")
-		y := strings.ReplaceAll(xb.(string), "'", "")
+		s, ok := xb.(string)
+		if !ok {
+			return false, fmt.Errorf("cannot convert to string")
+		}
+
+		y := strings.ReplaceAll(s, "'", "")
 		return x > y, nil
 	case int32:
-		return x > xb.(int32), nil
+		yy, e := Any2Int32(xb)
+		if e != nil {
+			return false, e
+		}
+
+		return x > *yy, nil
 	case int64:
-		return x > xb.(int64), nil
+		yy, e := Any2Int64(xb)
+		if e != nil {
+			return false, e
+		}
+
+		return x > *yy, nil
 	case float32:
-		return x > xb.(float32), nil
+		yy, e := Any2Float32(xb)
+		if e != nil {
+			return false, e
+		}
+
+		return x > *yy, nil
 	case float64:
-		return x > xb.(float64), nil
+		yy, e := Any2Float64(xb)
+		if e != nil {
+			return false, e
+		}
+
+		return x > *yy, nil
 	case time.Time:
-		return x.Sub(xb.(time.Time)) > 0, nil
+		t, ok := xb.(time.Time)
+		if !ok {
+			return false, fmt.Errorf("cannot convert to date")
+		}
+
+		return x.Sub(t) > 0, nil
 	}
 
 	return false, fmt.Errorf("unsupported comparison")

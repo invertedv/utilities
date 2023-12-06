@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.4.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/invertedv/chutils v1.1.32
 	github.com/invertedv/keyval v0.0.16
 	github.com/stretchr/testify v1.8.2
