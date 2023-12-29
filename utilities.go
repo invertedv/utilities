@@ -1,11 +1,13 @@
 package utilities
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"github.com/dustin/go-humanize"
+	"golang.org/x/term"
 	"io"
 	"io/fs"
 	"math"
@@ -359,6 +361,22 @@ func DropTable(table string, conn *chutils.Connect) error {
 	_, err := conn.Exec(qry)
 
 	return err
+}
+
+// GetTTYecho reads a response from the TTY while echoing the user's typing
+func GetTTYecho(prompt string) string {
+	rdr := bufio.NewReader(os.Stdin)
+	fmt.Print(prompt)
+	txt, _ := rdr.ReadString('\n')
+	return strings.ReplaceAll(txt, "\n", "")
+}
+
+// GetTTYnoecho reads a response from the TTYgit  without echoing the user's typing
+func GetTTYnoecho(prompt string) string {
+	fmt.Print(prompt)
+	pass, _ := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	return string(pass)
 }
 
 // ***************  Misc
