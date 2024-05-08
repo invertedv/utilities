@@ -19,7 +19,7 @@ func TestTableToCSV(t *testing.T) {
 	user := os.Getenv("user")
 	pw := os.Getenv("pw")
 	host := os.Getenv("host")
-	conn, e1 := makeConnection(host, user, pw, 100000, 10000, 1)
+	conn, e1 := MakeConnection(host, user, pw, 100000, 10000, 1)
 	assert.Nil(t, e1)
 	defer func() { _ = conn.Close() }()
 

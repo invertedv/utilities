@@ -366,9 +366,9 @@ func DropTable(table string, conn *chutils.Connect) error {
 	return err
 }
 
-// makeConnection establishes the connection to ClickHouse, supplying common options
+// MakeConnection establishes the connection to ClickHouse, supplying common options
 // host, user, password are what you think
-func makeConnection(host, user, password string, maxMemory, maxGroupBy int64, maxThreads int) (conn *chutils.Connect, err error) {
+func MakeConnection(host, user, password string, maxMemory, maxGroupBy int64, maxThreads int) (conn *chutils.Connect, err error) {
 	if user == "" {
 		user = GetTTYecho("ClickHouse User: ")
 	}
