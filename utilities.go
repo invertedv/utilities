@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/term"
 	"io"
@@ -20,6 +21,8 @@ import (
 	"time"
 
 	"github.com/invertedv/chutils"
+	f "github.com/invertedv/chutils/file"
+	s "github.com/invertedv/chutils/sql"
 	"github.com/invertedv/keyval"
 )
 
@@ -361,6 +364,71 @@ func DropTable(table string, conn *chutils.Connect) error {
 	_, err := conn.Exec(qry)
 
 	return err
+}
+
+// makeConnection establishes the connection to ClickHouse, supplying common options
+// host, user, password are what you think
+func makeConnection(host, user, password string, maxMemory, maxGroupBy int64, maxThreads int) (conn *chutils.Connect, err error) {
+	if user == "" {
+		user = GetTTYecho("ClickHouse User: ")
+	}
+
+	if password == "" {
+		password = GetTTYnoecho("Clickhouse Password: ")
+	}
+
+	if conn, err = chutils.NewConnect(host, user, password, clickhouse.Settings{
+		"max_memory_usage":                   maxMemory,
+		"max_bytes_before_external_group_by": maxGroupBy,
+		"max_threads":                        maxThreads,
+	}); err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+// TableToCSV writes selected fields from a ClickHouse table to a CSV
+func TableToCSV(table, csvFile, fields, orderBy string, delimStrings, header bool, conn *chutils.Connect) error {
+	if fields == "" {
+		fields = "*"
+	}
+
+	handle, e := os.Create(csvFile)
+	if e != nil {
+		return e
+	}
+	defer func() { _ = handle.Close() }()
+
+	if orderBy != "" {
+		orderBy = fmt.Sprintf("ORDER BY %s", orderBy)
+	}
+
+	qry := fmt.Sprintf("SELECT %s FROM %s %s", fields, table, orderBy)
+	rdr := s.NewReader(qry, conn)
+	defer func() { _ = rdr.Close() }()
+
+	if ex := rdr.Init("", chutils.MergeTree); ex != nil {
+		return ex
+	}
+
+	if header {
+		if _, e := handle.WriteString(strings.Join(rdr.TableSpec().FieldList(), ",") + "\n"); e != nil {
+			return e
+		}
+	}
+
+	quote := '"'
+	if !delimStrings {
+		quote = 0
+	}
+
+	wtr := f.NewWriter(handle, csvFile, nil, ',', '\n', quote, "")
+
+	// after = -1 means will not also produce a ClickHouse table
+	ex := chutils.Export(rdr, wtr, -1, true)
+
+	return ex
 }
 
 // GetTTYecho reads a response from the TTY while echoing the user's typing
