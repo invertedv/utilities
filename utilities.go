@@ -367,7 +367,10 @@ func DropTable(table string, conn *chutils.Connect) error {
 }
 
 // MakeConnection establishes the connection to ClickHouse, supplying common options
-// host, user, password are what you think
+// - host, user, password are what you think
+// - maxMemory: maximum memory (bytes) for a query
+// - maxGroupBy: maximum memory to use in a GROUP BY
+// - maxThreads: maximum # of threads for a query
 func MakeConnection(host, user, password string, maxMemory, maxGroupBy int64, maxThreads int) (conn *chutils.Connect, err error) {
 	if user == "" {
 		user = GetTTYecho("ClickHouse User: ")
@@ -388,23 +391,19 @@ func MakeConnection(host, user, password string, maxMemory, maxGroupBy int64, ma
 	return conn, nil
 }
 
-// TableToCSV writes selected fields from a ClickHouse table to a CSV
-func TableToCSV(table, csvFile, fields, orderBy string, delimStrings, header bool, conn *chutils.Connect) error {
-	if fields == "" {
-		fields = "*"
-	}
-
+// QueryToCSV writes the output of the query to a CSV.
+// - qry: query to run
+// - csvFile: output file
+// - quoteStings: if true, places strings in double quotes
+// - header: if true, include header row of field names
+// - conn: ClickHouse connection
+func QueryToCSV(qry, csvFile string, quoteStrings, header bool, conn *chutils.Connect) error {
 	handle, e := os.Create(csvFile)
 	if e != nil {
 		return e
 	}
 	defer func() { _ = handle.Close() }()
 
-	if orderBy != "" {
-		orderBy = fmt.Sprintf("ORDER BY %s", orderBy)
-	}
-
-	qry := fmt.Sprintf("SELECT %s FROM %s %s", fields, table, orderBy)
 	rdr := s.NewReader(qry, conn)
 	defer func() { _ = rdr.Close() }()
 
@@ -419,7 +418,7 @@ func TableToCSV(table, csvFile, fields, orderBy string, delimStrings, header boo
 	}
 
 	quote := '"'
-	if !delimStrings {
+	if !quoteStrings {
 		quote = 0
 	}
 

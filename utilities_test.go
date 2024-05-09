@@ -23,7 +23,7 @@ func TestTableToCSV(t *testing.T) {
 	assert.Nil(t, e1)
 	defer func() { _ = conn.Close() }()
 
-	e := TableToCSV("tmp.poolx", "/tmp/test.csv", "expWAC, month, expCPR", "month DESC", true, true, conn)
+	e := QueryToCSV("SELECT month, expCPR FROM tmp.poolx ORDER BY month", "/tmp/test.csv", false, true, conn)
 	assert.Nil(t, e)
 }
 
